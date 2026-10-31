@@ -32,10 +32,15 @@ document.querySelectorAll('a.poop-link').forEach(a => {
   a.addEventListener('click', reroll);
 });
 
-// --- Audio. Sound is on by default; browsers only let it start after your first click or keypress.
+// --- Audio: real fart recordings (from the terminalfart package, Apache-2.0; credited on /credits/).
+// Sound is on by default; browsers only let it start after your first click or keypress.
+const AUDIO_BASE = new URL('../audio/', document.currentScript.src);
+const SAMPLES = ['dry', 'needs-you', 'success', 'toot', 'wet', 'poop-toot', 'done-long', 'hellacious'];
+const CLICK_FARTS = ['dry', 'needs-you', 'success', 'toot', 'wet', 'poop-toot', 'wet', 'toot'];
 let soundOn = true;
 try { soundOn = localStorage.getItem('shart-sound') !== 'off'; } catch {}
-let ctx, master, musicBus, noiseBuf;
+let ctx, master, musicBus, loading;
+const samples = {}; // name -> { buf, onset }
 
 function audio() {
   if (!ctx) {
@@ -47,156 +52,127 @@ function audio() {
     const comp = ctx.createDynamicsCompressor();
     master.connect(comp).connect(ctx.destination);
     musicBus = ctx.createGain();
-    musicBus.gain.value = 0.3;
+    musicBus.gain.value = 0.45;
     musicBus.connect(master);
-    // two seconds of brown-ish noise, reused by every fart
-    noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
-    const d = noiseBuf.getChannelData(0);
-    let last = 0;
-    for (let i = 0; i < d.length; i++) { last = (last + 0.04 * (Math.random() * 2 - 1)) / 1.04; d[i] = last * 3.5; }
+    load();
   }
   if (ctx.state === 'suspended') ctx.resume();
   return ctx;
 }
 
-const shaperCurves = {};
-function shaperCurve(k) {
-  if (shaperCurves[k]) return shaperCurves[k];
-  const c = new Float32Array(1024);
-  for (let i = 0; i < c.length; i++) { const x = i / 512 - 1; c[i] = Math.tanh(k * x) / Math.tanh(k); }
-  return (shaperCurves[k] = c);
+function load() {
+  return loading || (loading = Promise.all(SAMPLES.map(async name => {
+    try {
+      const res = await fetch(new URL(name + '.mp3', AUDIO_BASE));
+      const buf = await ctx.decodeAudioData(await res.arrayBuffer());
+      // skip any silence at the start so the fart lands right on the click
+      const d = buf.getChannelData(0);
+      let i = 0;
+      while (i < d.length && Math.abs(d[i]) < 0.03) i++;
+      samples[name] = { buf, onset: Math.max(0, i / buf.sampleRate - 0.01) };
+    } catch {}
+  })));
 }
 
-// A synthesized fart. Every option is randomized when left out, so no two are alike.
-function fart(o = {}) {
+// Play a recording. Options: rate (speed/pitch), vol, when, dur (cut short with a fade), dest, force (ignore mute)
+function play(name, o = {}) {
   if (!o.force && !soundOn) return;
   const c = audio();
   if (!c) return;
-  const t = o.when ?? c.currentTime;
-  const dur = o.dur ?? rand(0.25, 0.85);
-  const base = o.pitch ?? rand(55, 130);
-  const vol = o.vol ?? rand(0.35, 0.6);
-
-  const noise = c.createBufferSource();
-  noise.buffer = noiseBuf; noise.loop = true;
-  const noiseGain = c.createGain(); noiseGain.gain.value = o.noise ?? rand(0.6, 1.1);
-
-  // buzzing tone whose pitch wanders around and sags at the end
-  const osc = c.createOscillator(); osc.type = 'sawtooth';
-  const steps = Math.max(8, Math.round(dur * 24));
-  const pitch = new Float32Array(steps);
-  let p = base;
-  for (let i = 0; i < steps; i++) {
-    p = Math.min(base * 1.8, Math.max(base * 0.55, p * rand(0.9, 1.1)));
-    pitch[i] = p * (1 - 0.35 * i / steps);
+  const s = samples[name];
+  if (!s) { // not decoded yet: play it as soon as it is, unless it was meant for a precise beat
+    if (o.when == null) load().then(() => samples[name] && play(name, o));
+    return;
   }
-  osc.frequency.setValueCurveAtTime(pitch, t, dur);
-  const toneGain = c.createGain(); toneGain.gain.value = 0.45;
-
-  // the flap: wobbles both pitch and loudness
-  const flap = c.createOscillator(); flap.frequency.value = o.flutter ?? rand(14, 34);
-  const flapPitch = c.createGain(); flapPitch.gain.value = base * 0.35;
-  const flapAmp = c.createGain(); flapAmp.gain.value = 0.4;
-  const trem = c.createGain(); trem.gain.value = 0.6;
-  flap.connect(flapPitch).connect(osc.frequency);
-  flap.connect(flapAmp).connect(trem.gain);
-
-  const filter = c.createBiquadFilter(); filter.type = 'lowpass';
-  filter.frequency.value = o.lowpass ?? rand(320, 720); filter.Q.value = 5;
-  const shaper = c.createWaveShaper(); shaper.curve = shaperCurve(o.drive ?? 2);
-
-  const amp = c.createGain();
-  if (o.ampCurve) {
-    amp.gain.value = 0.0001;
-    amp.gain.setValueCurveAtTime(Float32Array.from(o.ampCurve, v => Math.max(0.0001, v * vol)), t, dur);
-  } else {
-    amp.gain.setValueAtTime(0.0001, t);
-    amp.gain.exponentialRampToValueAtTime(vol, t + 0.025);
-    amp.gain.exponentialRampToValueAtTime(vol * 0.6, t + dur * 0.7);
-    amp.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  const t = Math.max(o.when ?? 0, c.currentTime);
+  const rate = o.rate ?? 1, vol = o.vol ?? 1;
+  const src = c.createBufferSource();
+  src.buffer = s.buf;
+  src.playbackRate.value = rate;
+  const full = (s.buf.duration - s.onset) / rate;
+  const dur = Math.min(o.dur ?? full, full);
+  const g = c.createGain();
+  g.gain.setValueAtTime(vol, t);
+  if (dur < full) {
+    g.gain.setValueAtTime(vol, t + Math.max(0, dur - 0.05));
+    g.gain.linearRampToValueAtTime(0.0001, t + dur);
   }
-
-  noise.connect(noiseGain).connect(filter);
-  osc.connect(toneGain).connect(filter);
-  filter.connect(shaper).connect(trem).connect(amp).connect(o.dest || master);
-  [noise, osc, flap].forEach(n => { n.start(t, n === noise ? Math.random() : 0); n.stop(t + dur + 0.05); });
+  src.connect(g).connect(o.dest || master);
+  src.start(t, s.onset);
+  src.stop(t + dur + 0.02);
 }
 
-// The Flush button's grand finale: long, loud and deliberately ignores the mute button.
+// A random fart, never quite the same twice
+const fart = (o = {}) => play(pick(CLICK_FARTS), { rate: rand(0.85, 1.25), vol: rand(0.75, 1), dur: 2.4, ...o });
+
+// The Flush button's grand finale: two long farts back to back, pushed through a limiter so it's
+// as loud as it can go. Deliberately ignores the mute button. Returns how long it lasts, in seconds.
+const MEGA_SECS = 13.5;
 function megaFart() {
   const c = audio();
   if (!c) return 0;
-  const loud = c.createGain(); loud.gain.value = 1.4;
-  const comp = c.createDynamicsCompressor();
-  comp.threshold.value = -18; comp.ratio.value = 6; comp.attack.value = 0.003; comp.release.value = 0.2;
-  loud.connect(comp).connect(c.destination);
-
-  const t = c.currentTime + 0.05, dur = 8;
-  // loudness curve: quick swell, big body, random sputters, then a dying wheeze
-  const n = 320, curve = new Array(n);
-  let sputter = 0;
-  for (let i = 0; i < n; i++) {
-    const x = i / n;
-    if (sputter > 0) sputter--; else if (Math.random() < 0.025 && x > 0.15) sputter = 2 + Math.floor(Math.random() * 5);
-    const swell = Math.min(1, x * 14);
-    const fade = x > 0.82 ? Math.max(0, (1 - x) / 0.18) : 1;
-    curve[i] = swell * fade * (0.8 + 0.2 * Math.sin(x * 40)) * (sputter ? 0.12 : 1);
-  }
-  fart({ force: true, when: t, dur, pitch: 72, vol: 1, dest: loud, ampCurve: curve, flutter: 21, drive: 7, lowpass: 950, noise: 1.2 });
-  // extra bubbly layers on top
-  for (let k = 0; k < 8; k++) {
-    fart({ force: true, when: t + rand(0.3, dur - 1.2), dur: rand(0.4, 1.1), pitch: rand(40, 70), vol: 0.9, dest: loud, drive: 5 });
-  }
-  // ...and the little squeaks at the end
-  [0, 0.4, 0.75, 1.3].forEach((d, i) => {
-    fart({ force: true, when: t + dur + 0.2 + d, dur: 0.22 - i * 0.03, pitch: 170 + i * 55, vol: 0.8, dest: loud, lowpass: 1400 });
-  });
-  return dur + 1.6;
+  const go = () => {
+    const loud = c.createGain();
+    loud.gain.value = 4;
+    const limiter = c.createDynamicsCompressor();
+    limiter.threshold.value = -6; limiter.knee.value = 0; limiter.ratio.value = 20;
+    limiter.attack.value = 0.001; limiter.release.value = 0.1;
+    loud.connect(limiter).connect(c.destination);
+    const t = c.currentTime + 0.05, f = { force: true, dest: loud };
+    play('done-long', { ...f, when: t });
+    play('poop-toot', { ...f, when: t + 1.2, rate: 0.8, vol: 0.6 });
+    play('hellacious', { ...f, when: t + 3.5, rate: 0.9 });
+    // ...and the little squeaks at the end
+    play('toot', { ...f, when: t + 11.9, rate: 1.6 });
+    play('wet', { ...f, when: t + 12.4, rate: 1.4 });
+    play('toot', { ...f, when: t + 13, rate: 2.2 });
+  };
+  if (SAMPLES.every(n => samples[n])) go(); else load().then(go);
+  return MEGA_SECS;
 }
 
-// --- Background music: an oompah band where the tuba is a fart
+// --- Background music: an oompah band where the tuba and the melody are real farts
 const BEAT = 60 / 116 / 2; // one eighth note at 116 bpm
-const note = n => 261.63 * Math.pow(2, n / 12); // semitones from middle C
-const BARS = [ // [tuba root, chord] per bar, C F G C
+const semis = n => Math.pow(2, n / 12);
+const BARS = [ // [tuba root, chord] per bar, C F G C (semitones from middle C)
   { root: -24, chord: [0, 4, 7] },
   { root: -19, chord: [0, 5, 9] },
   { root: -17, chord: [-1, 2, 7] },
   { root: -24, chord: [0, 4, 7] },
 ];
-const MELODY = [ // kazoo, one entry per eighth, null = rest
+const MELODY = [ // one entry per eighth, null = rest
   12, null, 16, null, 19, 19, 16, null,
   17, null, 21, null, 17, 16, 14, null,
   14, 14, 19, null, 17, 14, 11, null,
   12, 16, 12, 7, 12, null, null, null,
 ];
 
-function tone(freq, t, len, { type = 'square', vol = 0.1, vib = 0, vibRate = 6, lowpass = 1800 } = {}) {
-  const osc = ctx.createOscillator(); osc.type = type; osc.frequency.value = freq;
-  const lfo = ctx.createOscillator(); lfo.frequency.value = vibRate;
-  const lfoGain = ctx.createGain(); lfoGain.gain.value = freq * vib;
-  lfo.connect(lfoGain).connect(osc.frequency);
-  const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = lowpass;
+// a short square-wave "pah" to hold the chords together
+function tone(freq, t, len, vol) {
+  const osc = ctx.createOscillator(); osc.type = 'square'; osc.frequency.value = freq;
+  const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 1400;
   const g = ctx.createGain();
   g.gain.setValueAtTime(0.0001, t);
   g.gain.exponentialRampToValueAtTime(vol, t + 0.015);
   g.gain.exponentialRampToValueAtTime(0.0001, t + len);
   osc.connect(f).connect(g).connect(musicBus);
-  [osc, lfo].forEach(n => { n.start(t); n.stop(t + len + 0.02); });
+  osc.start(t); osc.stop(t + len + 0.02);
 }
 
 function playStep(step, t) {
   const bar = BARS[Math.floor(step / 8)], beat = step % 8;
-  // fart tuba on 1 and 3
-  if (beat === 0) fart({ when: t, dur: BEAT * 1.7, pitch: note(bar.root), vol: 0.5, dest: musicBus, flutter: 24, lowpass: 500 });
-  if (beat === 4) fart({ when: t, dur: BEAT * 1.7, pitch: note(bar.root + 7), vol: 0.5, dest: musicBus, flutter: 24, lowpass: 500 });
+  const m = { when: t, dest: musicBus };
+  // fart tuba on 1 and 3: the "wet" one, slowed down to each bass note
+  if (beat === 0) play('wet', { ...m, rate: 0.7 * semis(bar.root + 24), dur: BEAT * 1.8, vol: 1 });
+  if (beat === 4) play('wet', { ...m, rate: 0.7 * semis(bar.root + 31), dur: BEAT * 1.8, vol: 1 });
   // "pah" chords on the off-beats
-  if (beat === 2 || beat === 6) bar.chord.forEach(n => tone(note(n), t, BEAT * 0.6, { vol: 0.045, lowpass: 1400 }));
-  // kazoo melody
-  const m = MELODY[step];
-  if (m != null) tone(note(m), t, BEAT * 0.95, { type: 'sawtooth', vol: 0.07, vib: 0.02, vibRate: 7, lowpass: 2600 });
-  // fart drum fills
+  if (beat === 2 || beat === 6) bar.chord.forEach(n => tone(261.63 * semis(n), t, BEAT * 0.6, 0.03));
+  // the tune, tooted
+  const n = MELODY[step];
+  if (n != null) play('toot', { ...m, rate: 0.9 * semis(n - 12), dur: BEAT * 1.1, vol: 0.9 });
+  // drum fills
   if (beat === 7 || (step >= 29 && Math.random() < 0.7)) {
-    fart({ when: t, dur: rand(0.08, 0.16), pitch: rand(80, 140), vol: 0.55, dest: musicBus, lowpass: 900 });
+    play(pick(['dry', 'needs-you', 'success']), { ...m, rate: rand(1.1, 1.6), dur: rand(0.12, 0.2), vol: 0.8 });
   }
 }
 
@@ -277,7 +253,7 @@ let lastKey = 0;
 document.addEventListener('keydown', e => {
   if (e.repeat || performance.now() - lastKey < 90) return;
   lastKey = performance.now();
-  fart({ dur: rand(0.07, 0.15), pitch: rand(140, 260), vol: 0.3, lowpass: 1500 });
+  play(pick(['toot', 'wet']), { rate: rand(1.4, 2), dur: 0.2, vol: 0.6 });
 });
 
 // Hovering buttons and links makes them squeak
@@ -286,7 +262,7 @@ document.addEventListener('pointerover', e => {
   if (!ctx || !e.target.closest('.btn, .nav a, .gallery button, .logo, .lb-prev, .lb-next')) return;
   if (performance.now() - lastHover < 250) return;
   lastHover = performance.now();
-  fart({ dur: rand(0.1, 0.2), pitch: rand(180, 300), vol: 0.22, lowpass: 1800, flutter: rand(30, 45) });
+  play('toot', { rate: rand(1.8, 2.5), dur: 0.25, vol: 0.45 });
 });
 
 // Scrolling occasionally squeezes one out
@@ -294,13 +270,13 @@ let lastScroll = 0;
 window.addEventListener('scroll', () => {
   if (!ctx || performance.now() - lastScroll < 1200) return;
   lastScroll = performance.now();
-  if (Math.random() < 0.35) fart({ vol: 0.35 });
+  if (Math.random() < 0.35) fart({ vol: 0.6 });
 }, { passive: true });
 
 // ...and every so often, out of nowhere
 (function ambush() {
   setTimeout(() => {
-    if (ctx && !document.hidden) fart({ dur: rand(0.5, 1.4), vol: rand(0.3, 0.55) });
+    if (ctx && !document.hidden) play(pick(['poop-toot', 'success', 'needs-you', 'dry']), { vol: rand(0.6, 0.9) });
     ambush();
   }, rand(10000, 25000));
 })();
