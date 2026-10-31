@@ -154,3 +154,17 @@ html, a, button, .gallery button {
   .gas, .gas-text, .flush-btn.flushing { animation: none; }
   .gas { display: none; }
 }
+
+/* "Click anywhere for fart music" bubble, shown while the browser blocks autoplay */
+.sound-hint {
+  position: fixed; right: 78px; bottom: 26px; z-index: 60; pointer-events: none;
+  background: var(--paper); color: var(--ink); font: 700 13px/1.2 var(--sans); letter-spacing: .04em;
+  padding: 9px 12px; border-radius: 16px; box-shadow: 0 4px 14px rgba(0, 0, 0, .35);
+  animation: hint-bob 1.2s ease-in-out infinite alternate;
+}
+.sound-hint::after {
+  content: ""; position: absolute; right: -6px; top: 50%; margin-top: -6px;
+  border: 6px solid transparent; border-right: 0; border-left-color: var(--paper);
+}
+@keyframes hint-bob { to { transform: translateX(-6px); } }
+@media (prefers-reduced-motion: reduce) { .sound-hint { animation: none; } }

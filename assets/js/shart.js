@@ -21,24 +21,25 @@ const POOP_LINKS = [
   'https://en.wikipedia.org/wiki/Mr._Hankey,_the_Christmas_Poo',
   'https://en.wikipedia.org/wiki/Cow_dung',
 ];
-document.querySelectorAll('a.poop-link').forEach(a => {
-  const reroll = () => {
-    let next;
-    do { next = pick(POOP_LINKS); } while (next === a.href);
-    a.href = next;
-  };
-  reroll();
-  // the default navigation reads href after this runs, so each click lands somewhere new
-  a.addEventListener('click', reroll);
-});
+const reroll = a => {
+  let next;
+  do { next = pick(POOP_LINKS); } while (next === a.href);
+  a.href = next;
+};
+const rerollAll = () => document.querySelectorAll('a.poop-link').forEach(reroll);
+rerollAll();
+// the default navigation reads href after this runs, so each click lands somewhere new
+document.addEventListener('click', e => { const a = e.target.closest('a.poop-link'); if (a) reroll(a); });
 
 // --- Audio: real fart recordings (from the terminalfart package, Apache-2.0; credited on /credits/).
-// Sound is on by default; browsers only let it start after your first click or keypress.
+// Sound is on by default. It tries to start the moment the page loads; browsers that block that
+// (most do on a first visit) start it on the first click, tap or keypress instead.
 const AUDIO_BASE = new URL('../audio/', document.currentScript.src);
 const SAMPLES = ['dry', 'needs-you', 'success', 'toot', 'wet', 'poop-toot', 'done-long', 'hellacious'];
 const CLICK_FARTS = ['dry', 'needs-you', 'success', 'toot', 'wet', 'poop-toot', 'wet', 'toot'];
 let soundOn = true;
 try { soundOn = localStorage.getItem('shart-sound') !== 'off'; } catch {}
+const MUSIC_VOL = 0.07; // background track, kept low so click farts stand out
 let ctx, master, musicBus, loading;
 const samples = {}; // name -> { buf, onset }
 
@@ -52,7 +53,7 @@ function audio() {
     const comp = ctx.createDynamicsCompressor();
     master.connect(comp).connect(ctx.destination);
     musicBus = ctx.createGain();
-    musicBus.gain.value = 0.15;
+    musicBus.gain.value = MUSIC_VOL;
     musicBus.connect(master);
     load();
   }
@@ -79,6 +80,9 @@ function play(name, o = {}) {
   if (!o.force && !soundOn) return;
   const c = audio();
   if (!c) return;
+  // while the browser is holding sound back, only play what a click or key asked for; anything
+  // else would pile up and all come out at once when sound is finally allowed
+  if (c.state !== 'running' && !(navigator.userActivation ? navigator.userActivation.isActive : true)) return;
   const s = samples[name];
   if (!s) { // not decoded yet: play it as soon as it is, unless it was meant for a precise beat
     if (o.when == null) load().then(() => samples[name] && play(name, o));
@@ -100,6 +104,15 @@ function play(name, o = {}) {
   src.connect(g).connect(o.dest || master);
   src.start(t, s.onset);
   src.stop(t + dur + 0.02);
+  if (o.dest !== musicBus) duck(t, dur);
+}
+
+// Dip the music while a fart plays over it, so every fart is heard loud and clear
+function duck(t, dur) {
+  const g = musicBus.gain;
+  g.cancelScheduledValues(t);
+  g.setTargetAtTime(MUSIC_VOL * 0.2, t, 0.02);
+  g.setTargetAtTime(MUSIC_VOL, t + Math.min(dur, 3), 0.25);
 }
 
 // A random fart, never quite the same twice
@@ -176,20 +189,35 @@ function playStep(step, t) {
   }
 }
 
+// The song's position is pinned to the wall clock (saved for this tab), so after a full page load
+// it carries on from wherever it would have been instead of starting over.
 let musicOn = false, nextTime = 0, step = 0, timer = 0;
+function syncToSong() {
+  let epoch = 0;
+  try { epoch = +sessionStorage.getItem('shart-song') || 0; } catch {}
+  const now = Date.now() / 1000;
+  if (!epoch || now - epoch > 6 * 3600) {
+    epoch = now + 0.1;
+    try { sessionStorage.setItem('shart-song', epoch); } catch {}
+  }
+  const k = Math.ceil((now + 0.05 - epoch) / BEAT); // next eighth note on the song's grid
+  step = ((k % MELODY.length) + MELODY.length) % MELODY.length;
+  nextTime = ctx.currentTime + (epoch + k * BEAT - now);
+}
 function startMusic() {
   if (musicOn || !soundOn || !audio()) return;
   musicOn = true;
-  nextTime = ctx.currentTime + 0.1;
+  syncToSong();
   timer = setInterval(() => {
-    if (nextTime < ctx.currentTime - 0.1) nextTime = ctx.currentTime + 0.05; // don't burst after a stall
+    toggle.classList.toggle('playing', ctx.state === 'running');
+    if (ctx.state !== 'running') return; // still waiting for the browser to allow sound
+    if (nextTime < ctx.currentTime - 0.1) syncToSong(); // fell behind (blocked or throttled): rejoin the song
     while (nextTime < ctx.currentTime + 0.25) {
       playStep(step, nextTime);
       nextTime += BEAT;
       step = (step + 1) % MELODY.length;
     }
   }, 60);
-  toggle.classList.add('playing');
 }
 function stopMusic() {
   musicOn = false;
@@ -212,17 +240,25 @@ toggle.addEventListener('click', e => {
   try { localStorage.setItem('shart-sound', soundOn ? 'on' : 'off'); } catch {}
   paintToggle();
   if (audio()) master.gain.setTargetAtTime(soundOn ? 1 : 0, ctx.currentTime, 0.02);
-  if (soundOn) { fart(); startMusic(); } else stopMusic();
+  if (soundOn) { fart(); startMusic(); } else { stopMusic(); hint.remove(); }
 });
 document.body.append(toggle);
 
-// First click or key unlocks audio and starts the band
-const unlock = () => { if (soundOn) startMusic(); };
-document.addEventListener('pointerdown', unlock);
-document.addEventListener('keydown', unlock);
+// Start the band straight away if the browser allows it; otherwise on the first click, tap or key
+const unlock = () => { if (soundOn) { startMusic(); audio(); } };
+['pointerdown', 'keydown', 'touchend'].forEach(ev => document.addEventListener(ev, unlock, { capture: true }));
+const hint = document.createElement('div');
+hint.className = 'sound-hint';
+hint.textContent = '\u{1F3BA} Click anywhere for fart music';
+if (soundOn && (window.AudioContext || window.webkitAudioContext)) {
+  startMusic();
+  // if the browser is holding the sound back, say so next to the speaker button
+  setTimeout(() => { if (ctx && ctx.state !== 'running' && soundOn) document.body.append(hint); }, 700);
+  ctx.addEventListener('statechange', () => { if (ctx.state === 'running') hint.remove(); });
+}
 
 // Pause the band while the tab is hidden; the title begs you to come back
-const realTitle = document.title;
+let realTitle = document.title;
 document.addEventListener('visibilitychange', () => {
   document.title = document.hidden ? '\u{1F4A9} Hold it in... come back!' : realTitle;
   if (document.hidden) { if (musicOn) { stopMusic(); musicOn = 'paused'; } }
@@ -241,9 +277,8 @@ function plop(x, y) {
   document.body.append(el);
   el.addEventListener('animationend', () => el.remove());
 }
-const flushBtn = document.querySelector('#flush-btn');
 document.addEventListener('click', e => {
-  if (e.target === toggle || (flushBtn && e.target.closest('#flush-btn'))) return;
+  if (e.target === toggle || e.target.closest('#flush-btn')) return;
   if (!reduceMotion) plop(e.clientX, e.clientY);
   fart();
 });
@@ -335,21 +370,64 @@ function gasAttack(x, y, secs) {
   }, secs * 1000);
 }
 
-if (flushBtn) {
+document.addEventListener('click', e => {
+  const flushBtn = e.target.closest('#flush-btn');
+  if (!flushBtn || flushBtn.disabled) return;
   const status = document.querySelector('.form-status');
-  flushBtn.addEventListener('click', () => {
-    if (flushBtn.disabled) return;
-    const secs = megaFart() || 6;
-    const r = flushBtn.getBoundingClientRect();
-    gasAttack(r.left + r.width / 2, r.top + r.height / 2, secs);
-    flushBtn.disabled = true;
-    flushBtn.classList.add('flushing');
-    status.textContent = '\u{1F6BD} *PFFFFFFRRRRRRRRRRRRT* This toilet is OUT OF ORDER. Nothing was sent. Please evacuate the area.';
-    setTimeout(() => {
-      flushBtn.disabled = false;
-      flushBtn.classList.remove('flushing');
-      status.textContent = 'Out of order. Maintenance has been notified. (They are not coming.)';
-    }, secs * 1000);
+  const secs = megaFart() || 6;
+  const r = flushBtn.getBoundingClientRect();
+  gasAttack(r.left + r.width / 2, r.top + r.height / 2, secs);
+  flushBtn.disabled = true;
+  flushBtn.classList.add('flushing');
+  status.textContent = '\u{1F6BD} *PFFFFFFRRRRRRRRRRRRT* This toilet is OUT OF ORDER. Nothing was sent. Please evacuate the area.';
+  setTimeout(() => {
+    flushBtn.disabled = false;
+    flushBtn.classList.remove('flushing');
+    status.textContent = 'Out of order. Maintenance has been notified. (They are not coming.)';
+  }, secs * 1000);
+});
+
+// --- Change pages without reloading, so the music never stops.
+// Links to other pages on this site fetch the new page and swap in its header, content and footer.
+// Anything unusual (other sites, new tabs, files, opened from disk) falls back to a normal load.
+let currentPath = location.pathname;
+async function goTo(url, push) {
+  let doc;
+  try {
+    const res = await fetch(url, { headers: { Accept: 'text/html' } });
+    if (!(res.headers.get('content-type') || '').includes('text/html')) throw 0;
+    doc = new DOMParser().parseFromString(await res.text(), 'text/html');
+  } catch { location.href = url; return; }
+  const parts = ['.site-header', 'main', '.site-footer'].map(sel => [document.querySelector(sel), doc.querySelector(sel)]);
+  if (parts.some(([now, next]) => !now || !next)) { location.href = url; return; }
+  // update the address first: the new page's relative links and images resolve against it
+  if (push) history.pushState({}, '', url);
+  currentPath = location.pathname;
+  parts.forEach(([now, next]) => now.replaceWith(document.adoptNode(next)));
+  document.title = realTitle = doc.title;
+  const target = url.hash && document.getElementById(decodeURIComponent(url.hash.slice(1)));
+  if (target) target.scrollIntoView(); else window.scrollTo(0, 0);
+  if (typeof initPage === 'function') initPage();
+  rerollAll();
+}
+if (location.protocol !== 'file:' && window.DOMParser && history.pushState) {
+  document.addEventListener('click', e => {
+    const a = e.target.closest('a[href]');
+    if (!a || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    if ((a.target && a.target !== '_self') || a.hasAttribute('download')) return;
+    const url = new URL(a.href, location.href);
+    if (url.origin !== location.origin || /\.[a-z0-9]+$/i.test(url.pathname) && !/\.html$/i.test(url.pathname)) return;
+    if (url.pathname === location.pathname && url.search === location.search) {
+      if (url.hash) return; // same page #anchor: let the browser scroll
+      e.preventDefault(); // link to the page you're on: just go back to the top, no reload
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+    e.preventDefault();
+    goTo(url, true);
+  });
+  window.addEventListener('popstate', () => {
+    if (location.pathname !== currentPath) goTo(new URL(location.href), false);
   });
 }
 })();
