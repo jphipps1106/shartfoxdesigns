@@ -36,42 +36,49 @@
   <main id="top">
 
     <section style="z-index:2" class="section contact bg-ink overlap divider-teeth">
-      <!-- To receive messages: create a free form at https://formspree.io and replace YOUR_FORM_ID below -->
-      <form id="contact-form" action="https://formspree.io/f/YOUR_FORM_ID" method="POST">
-        <fieldset>
-          <legend>Name</legend>
-          <div class="row">
-            <div class="field">
-              <label for="fname">First Name<span class="req">(required)</span></label>
-              <input id="fname" name="first_name" type="text" autocomplete="given-name" required>
+      <form id="contact-form" onsubmit="return false" aria-describedby="ooo-note">
+        <p class="ooo-note" id="ooo-note">🚧 This contact form is OUT OF ORDER. Please use another stall. 🚧</p>
+        <fieldset class="ooo-fields" disabled>
+          <fieldset>
+            <legend>Name</legend>
+            <div class="row">
+              <div class="field">
+                <label for="fname">First Name<span class="req">(required)</span></label>
+                <input id="fname" name="first_name" type="text" autocomplete="given-name">
+              </div>
+              <div class="field">
+                <label for="lname">Last Name<span class="req">(required)</span></label>
+                <input id="lname" name="last_name" type="text" autocomplete="family-name">
+              </div>
             </div>
-            <div class="field">
-              <label for="lname">Last Name<span class="req">(required)</span></label>
-              <input id="lname" name="last_name" type="text" autocomplete="family-name" required>
-            </div>
+          </fieldset>
+          <div class="field">
+            <label for="email">Email<span class="req">(required)</span></label>
+            <input id="email" name="email" type="email" autocomplete="email">
+          </div>
+          <div class="field">
+            <label for="source">How did you hear about me? (Be honest)</label>
+            <select id="source" name="heard_about">
+              <option value="">Select an option</option>
+              <option>Instagram</option>
+              <option>Facebook</option>
+              <option>Bathroom stall wall</option>
+              <option>Smelled it from afar</option>
+              <option>Other</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="message">What would you like to reach out about? Wash your hands first.<span class="req">(required)</span></label>
+            <textarea id="message" name="message"></textarea>
           </div>
         </fieldset>
-        <div class="field">
-          <label for="email">Email<span class="req">(required)</span></label>
-          <input id="email" name="email" type="email" autocomplete="email" required>
+        <div class="ooo-tape" aria-hidden="true">
+          <span class="tape t1">OUT OF ORDER · OUT OF ORDER · OUT OF ORDER · OUT OF ORDER · OUT OF ORDER</span>
+          <span class="tape t2">DO NOT USE · DO NOT USE · DO NOT USE · DO NOT USE · DO NOT USE · DO NOT USE</span>
+          <span class="tape t3">OUT OF ORDER · CLOGGED · OUT OF ORDER · CLOGGED · OUT OF ORDER · CLOGGED</span>
+          <span class="ooo-sign">OUT OF<br>ORDER</span>
         </div>
-        <div class="field">
-          <label for="source">How did you hear about me? (Be honest)</label>
-          <select id="source" name="heard_about">
-            <option value="">Select an option</option>
-            <option>Instagram</option>
-            <option>Facebook</option>
-            <option>Bathroom stall wall</option>
-            <option>Smelled it from afar</option>
-            <option>Other</option>
-          </select>
-        </div>
-        <div class="field">
-          <label for="message">What would you like to reach out about? Wash your hands first.<span class="req">(required)</span></label>
-          <textarea id="message" name="message" required></textarea>
-        </div>
-        <input class="hp" type="text" name="_gotcha" tabindex="-1" autocomplete="off" aria-hidden="true">
-        <button class="btn" type="submit">Flush 🚽</button>
+        <button class="btn flush-btn" id="flush-btn" type="button">Flush 🚽</button>
         <p class="form-status" role="status" aria-live="polite"></p>
       </form>
     </section>
@@ -80,8 +87,8 @@
 
   <footer class="site-footer">
     <div class="footer-inner">
-      <a class="btn" href="https://www.instagram.com/sharpfox.designs/" target="_blank" rel="noopener">Instagram</a>
-      <a class="btn" href="https://www.facebook.com/profile.php?id=61590797769780" target="_blank" rel="noopener">Facebook</a>
+      <a class="btn poop-link" href="https://en.wikipedia.org/wiki/Feces" target="_blank" rel="noopener">Poopstagram</a>
+      <a class="btn poop-link" href="https://en.wikipedia.org/wiki/Flatulence" target="_blank" rel="noopener">Fartbook</a>
       <a class="btn to-top" href="#top">Back to the top of the bowl</a>
     </div>
     <p class="copyright">&copy;SHARTFOX DESIGNS · a parody · please flush · <a href="../credits/">image credits</a></p>

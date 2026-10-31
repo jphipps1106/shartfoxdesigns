@@ -84,32 +84,4 @@ if (items.length) {
   });
 }
 
-// Contact form — posts to Formspree (see README). Falls back to a message until it is set up.
-const form = document.querySelector('#contact-form');
-if (form) {
-  const status = form.querySelector('.form-status');
-  form.addEventListener('submit', async e => {
-    e.preventDefault();
-    if (form.action.includes('YOUR_FORM_ID')) {
-      status.textContent = 'The contact form isn’t connected yet. Please reach out on Instagram or Facebook.';
-      return;
-    }
-    const btn = form.querySelector('button[type=submit]');
-    btn.disabled = true;
-    status.textContent = 'Sending…';
-    try {
-      const res = await fetch(form.action, {
-        method: 'POST',
-        body: new FormData(form),
-        headers: { Accept: 'application/json' },
-      });
-      if (!res.ok) throw new Error(res.status);
-      form.reset();
-      status.textContent = 'Thank you! I’ll get back to you soon.';
-    } catch {
-      status.textContent = 'Something went wrong. Please try again, or message me on Instagram.';
-    } finally {
-      btn.disabled = false;
-    }
-  });
-}
+// Contact form: permanently out of order (see shart.js for what the Flush button does now).

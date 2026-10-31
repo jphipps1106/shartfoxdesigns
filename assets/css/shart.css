@@ -80,3 +80,77 @@ html, a, button, .gallery button {
   .poop.rain { display: none; }
   .btn:hover { animation: none; }
 }
+
+/* ---------- Contact form: OUT OF ORDER ---------- */
+.contact form { position: relative; }
+.ooo-note {
+  margin: 0; text-align: center; font: 700 15px/1.3 var(--sans); letter-spacing: .08em; text-transform: uppercase;
+  color: #111; background: #ffd23f; padding: 12px 16px; border: 3px dashed #111;
+}
+.ooo-fields { border: 0; padding: 0; margin: 0; display: grid; gap: 22px; opacity: .45; filter: grayscale(.6); }
+.ooo-fields * { cursor: not-allowed !important; }
+.ooo-tape {
+  position: absolute; left: -24px; right: -24px; top: 60px; bottom: 110px;
+  pointer-events: none; overflow: hidden; z-index: 2;
+}
+.ooo-tape .tape {
+  position: absolute; left: -20%; width: 140%; white-space: nowrap; text-align: center;
+  padding: 10px 0; font: 700 clamp(14px, 2.4vw, 20px)/1 var(--sans); letter-spacing: .14em; color: #111;
+  background: repeating-linear-gradient(-45deg, #ffd23f 0 22px, #111 22px 30px);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, .45);
+  text-shadow: 0 0 4px #ffd23f, 0 0 8px #ffd23f, 0 0 2px #ffd23f;
+}
+.ooo-tape .t1 { top: 18%; transform: rotate(-12deg); }
+.ooo-tape .t2 { top: 50%; transform: rotate(9deg); }
+.ooo-tape .t3 { top: 78%; transform: rotate(-5deg); }
+.ooo-sign {
+  position: absolute; left: 50%; top: 46%; transform: translate(-50%, -50%) rotate(-4deg);
+  background: var(--paper); color: #b00; border: 6px solid #b00; padding: 14px 26px;
+  font: 700 clamp(28px, 6vw, 48px)/1 var(--sans); letter-spacing: .06em; text-align: center;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, .5);
+}
+.ooo-sign::before, .ooo-sign::after { /* bits of tape holding the sign up */
+  content: ""; position: absolute; top: -16px; width: 70px; height: 26px; background: rgba(255, 255, 240, .7);
+}
+.ooo-sign::before { left: -24px; transform: rotate(-30deg); }
+.ooo-sign::after { right: -24px; transform: rotate(30deg); }
+.flush-btn { position: relative; z-index: 3; }
+.flush-btn.flushing { animation: shake .08s linear infinite; }
+@keyframes shake { 0% { transform: translate(2px, -1px); } 50% { transform: translate(-2px, 2px); } 100% { transform: translate(1px, 1px); } }
+
+/* ---------- Green gas (spawned by shart.js on Flush) ---------- */
+.gas-haze {
+  position: fixed; inset: 0; z-index: 190; pointer-events: none;
+  background: radial-gradient(ellipse at 50% 70%, rgba(140, 220, 40, .55), rgba(90, 160, 20, .35) 60%, rgba(60, 120, 10, .25));
+  opacity: 0; transition: opacity 1.2s ease;
+}
+.gas-haze.on { opacity: 1; }
+.gas {
+  position: fixed; z-index: 195; pointer-events: none; border-radius: 50%;
+  background: radial-gradient(circle, rgba(160, 255, 60, .85), rgba(110, 200, 30, .55) 45%, rgba(80, 160, 20, 0) 70%);
+  filter: blur(6px); transform: translate(-50%, -50%) scale(.2); opacity: 0;
+  animation: gas var(--t, 4s) ease-out forwards;
+}
+@keyframes gas {
+  0% { transform: translate(-50%, -50%) scale(.2); opacity: 0; }
+  15% { opacity: .95; }
+  100% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(var(--s, 3)); opacity: 0; }
+}
+.gas-text {
+  position: fixed; left: 50%; top: 40%; z-index: 196; pointer-events: none;
+  font: 700 clamp(40px, 10vw, 120px)/1 var(--sans); color: #c8ff4a; letter-spacing: .04em;
+  text-shadow: 0 0 18px #3a6b00, 0 6px 0 #2b4d00; transform: translate(-50%, -50%) rotate(-6deg);
+  animation: gas-text 1.6s ease-in-out infinite alternate;
+}
+@keyframes gas-text { to { transform: translate(-50%, -50%) rotate(6deg) scale(1.1); } }
+
+/* Music note on the sound toggle while the fart track plays */
+.sound-toggle.playing::after {
+  content: "\266B"; position: absolute; top: -6px; right: -4px; font-size: 18px; color: var(--green);
+  text-shadow: 0 1px 2px #000; animation: wobble .8s ease infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gas, .gas-text, .flush-btn.flushing { animation: none; }
+  .gas { display: none; }
+}
