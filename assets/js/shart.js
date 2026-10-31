@@ -52,7 +52,7 @@ function audio() {
     const comp = ctx.createDynamicsCompressor();
     master.connect(comp).connect(ctx.destination);
     musicBus = ctx.createGain();
-    musicBus.gain.value = 0.45;
+    musicBus.gain.value = 0.15;
     musicBus.connect(master);
     load();
   }
